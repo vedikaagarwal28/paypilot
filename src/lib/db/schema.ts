@@ -62,6 +62,7 @@ export const pendingActions = pgTable('pending_actions', {
   subject: text('subject'),
   body: text('body'),
   reason: text('reason').notNull(),
+  gateReason: text('gate_reason').notNull().default(''),
   usedFallback: boolean('used_fallback').notNull().default(false),
   status: text('status').notNull().default('queued'),
   decidedBy: text('decided_by'),
