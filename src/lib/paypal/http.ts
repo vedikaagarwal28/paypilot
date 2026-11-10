@@ -41,7 +41,8 @@ export async function getAccessToken(): Promise<string> {
   return token.value;
 }
 
-export async function paypalFetch<T>(path: string, init: { method?: string; body?: unknown } = {}): Promise<T> {
+/** `raw` sends a pre-serialised JSON body untouched (used for webhook verification). */
+export async function paypalFetch<T>(path: string, init: { method?: string; body?: unknown; raw?: string } = {}): Promise<T> {
   const res = await fetch(`${env().PAYPAL_API_BASE}${path}`, {
     method: init.method ?? 'GET',
     headers: {
@@ -49,7 +50,7 @@ export async function paypalFetch<T>(path: string, init: { method?: string; body
       'Content-Type': 'application/json',
       Prefer: 'return=representation',
     },
-    body: init.body === undefined ? undefined : JSON.stringify(init.body),
+    body: init.raw ?? (init.body === undefined ? undefined : JSON.stringify(init.body)),
   });
   if (res.status === 204) return undefined as T;
   const text = await res.text();
