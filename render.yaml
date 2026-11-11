@@ -1,0 +1,43 @@
+services:
+  - type: web
+    name: paypilot
+    runtime: node
+    plan: free
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: PAYPAL_API_BASE
+        value: https://api-m.sandbox.paypal.com
+      - key: ANTHROPIC_MODEL
+        value: claude-sonnet-5-5
+      - key: DEMO_CLOCK_OFFSET_DAYS
+        value: "0"
+      - key: DEMO_PAY_MODE
+        value: buyer
+      - key: PAYPAL_WEBHOOK_SKIP_VERIFY
+        value: "false"
+      - key: RESEND_FROM
+        value: PayPilot <onboarding@resend.dev>
+      - key: PAYPAL_CLIENT_ID
+        sync: false
+      - key: PAYPAL_CLIENT_SECRET
+        sync: false
+      - key: PAYPAL_WEBHOOK_ID
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: DEMO_INBOX_EMAIL
+        sync: false
+      - key: SANDBOX_BUYER_EMAILS
+        sync: false
+      - key: SANDBOX_COLLAB_EMAILS
+        sync: false
+      - key: APP_URL
+        sync: false

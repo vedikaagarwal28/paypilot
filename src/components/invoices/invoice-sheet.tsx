@@ -1,13 +1,43 @@
 'use client';
 
-import { ExternalLinkIcon } from 'lucide-react';
+import { ExternalLinkIcon, Loader2Icon } from 'lucide-react';
 import Link from 'next/link';
+import { useState } from 'react';
+import { toast } from 'sonner';
+import { Button } from '@/components/ui/button';
+import { send } from '@/lib/fetcher';
 import { DemoBadge, RiskBar, StatusBadge, ToneBadge, riskColor } from '@/components/badges';
 import { SplitEditor } from '@/components/split-editor';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { formatUsd } from '@/lib/money';
 import type { InvoiceRow } from '@/lib/queries/invoices';
 import { PAID_STATUSES } from '@/lib/actions/can-execute';
+
+function RecordPaymentButton({ invoiceId, onDone }: { invoiceId: number; onDone: () => void }) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <Button
+      size="sm"
+      variant="outline"
+      disabled={busy}
+      onClick={async () => {
+        setBusy(true);
+        try {
+          await send(`/api/invoices/${invoiceId}/record-payment`, 'POST');
+          toast.success('Payment recorded in PayPal. Splits pay out automatically.');
+          onDone();
+        } catch (e) {
+          toast.error((e as Error).message);
+        } finally {
+          setBusy(false);
+        }
+      }}
+      title="Fallback when the sandbox checkout can't be used: records the payment on the real PayPal invoice"
+    >
+      {busy && <Loader2Icon className="animate-spin" />} Record payment
+    </Button>
+  );
+}
 
 export function InvoiceSheet({ row, onClose, onChanged }: { row: InvoiceRow | null; onClose: () => void; onChanged: () => void }) {
   const maxPoints = Math.max(1, ...(row?.riskFactors ?? []).map((f) => f.points));
@@ -57,11 +87,16 @@ export function InvoiceSheet({ row, onClose, onChanged }: { row: InvoiceRow | nu
                 <SplitEditor invoiceId={row.id} amountCents={row.amountCents} initial={row.splits} locked={PAID_STATUSES.includes(row.status)} onSaved={onChanged} />
               </section>
 
-              {row.payerViewUrl && (
-                <a href={row.payerViewUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-sm text-sky-700 hover:underline">
-                  Open in PayPal <ExternalLinkIcon className="size-3.5" />
-                </a>
-              )}
+              <div className="flex flex-wrap items-center gap-3">
+                {row.payerViewUrl && (
+                  <a href={row.payerViewUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-sm text-sky-700 hover:underline">
+                    Pay as client in PayPal <ExternalLinkIcon className="size-3.5" />
+                  </a>
+                )}
+                {!PAID_STATUSES.includes(row.status) && !['DRAFT', 'CANCELLED'].includes(row.status) && (
+                  <RecordPaymentButton invoiceId={row.id} onDone={onChanged} />
+                )}
+              </div>
             </div>
           </>
         )}
