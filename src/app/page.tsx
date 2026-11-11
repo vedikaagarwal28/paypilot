@@ -1,103 +1,99 @@
-import Image from "next/image";
+'use client';
 
-export default function Home() {
+import { BotIcon, Loader2Icon } from 'lucide-react';
+import Link from 'next/link';
+import { useState } from 'react';
+import { toast } from 'sonner';
+import useSWR from 'swr';
+import { ActivityList, timeAgo } from '@/components/activity-list';
+import { ActionCard } from '@/components/today/action-card';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { fetcher, send } from '@/lib/fetcher';
+import type { Dashboard } from '@/lib/queries/dashboard';
+import type { TriageSummary } from '@/lib/types';
+
+function Stat({ label, value, tone }: { label: string; value: number | string; tone?: string }) {
   return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+    <div className="rounded-xl border bg-background p-4">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className={`text-2xl font-semibold tabular-nums ${tone ?? ''}`}>{value}</p>
+    </div>
+  );
+}
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+export default function TodayPage() {
+  const { data, error, mutate } = useSWR<Dashboard>('/api/dashboard', fetcher, { refreshInterval: 3000 });
+  const [running, setRunning] = useState(false);
+
+  async function runAgent() {
+    setRunning(true);
+    try {
+      const s = await send<TriageSummary>('/api/agent/run', 'POST');
+      toast.success(`Agent run: ${s.needsAttention} need attention · ${s.autoSent} sent automatically · ${s.queued} waiting for you`);
+      mutate();
+    } catch (e) {
+      toast.error((e as { status?: number }).status === 409 ? 'Agent is already running' : (e as Error).message);
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  const run = data?.lastRun;
+  const queue = data?.queue ?? [];
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Today</h1>
+          <p className="text-sm text-muted-foreground">
+            Your collections agent checks every open invoice, sends what your rules allow and asks you about the rest.
+          </p>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+        <Button size="lg" onClick={runAgent} disabled={running}>
+          {running ? <Loader2Icon className="animate-spin" /> : <BotIcon />}
+          {running ? 'Agent is working…' : 'Run agent'}
+        </Button>
+      </div>
+
+      {error && <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{error.message}</p>}
+
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <Stat label="Open invoices" value={run?.open ?? '—'} />
+        <Stat label="Need attention" value={run?.needsAttention ?? '—'} tone="text-amber-600" />
+        <Stat label="Sent automatically" value={run?.autoSent ?? '—'} tone="text-emerald-600" />
+        <Stat label="Waiting for you" value={queue.filter((q) => q.status !== 'failed').length} tone="text-sky-600" />
+      </div>
+      {run && <p className="-mt-3 text-xs text-muted-foreground">Last agent run {timeAgo(run.finishedAt)}</p>}
+
+      <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
+        <section className="space-y-3">
+          <h2 className="font-semibold">Waiting for your approval</h2>
+          {!data && !error && <Loader2Icon className="size-5 animate-spin text-muted-foreground" />}
+          {data && queue.length === 0 && (
+            <Card>
+              <CardContent className="py-8 text-center text-sm text-muted-foreground">
+                {run ? 'All clear. Nothing needs you right now.' : 'Run the agent to triage your open invoices.'}
+              </CardContent>
+            </Card>
+          )}
+          {queue.map((item) => <ActionCard key={item.actionId} item={item} onChanged={() => mutate()} />)}
+        </section>
+
+        <aside className="space-y-3">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Recent agent actions</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ActivityList items={data?.recent ?? []} empty="No activity yet. Reset the demo from Settings, then run the agent." />
+              <Link href="/activity" className="mt-2 inline-block text-xs text-muted-foreground hover:underline">Full activity log →</Link>
+            </CardContent>
+          </Card>
+          {data?.lastResetAt && <p className="text-xs text-muted-foreground">Demo last reset {timeAgo(data.lastResetAt)}</p>}
+        </aside>
+      </div>
     </div>
   );
 }
