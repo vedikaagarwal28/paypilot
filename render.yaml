@@ -11,8 +11,10 @@ services:
         value: "22"
       - key: PAYPAL_API_BASE
         value: https://api-m.sandbox.paypal.com
-      - key: ANTHROPIC_MODEL
-        value: claude-sonnet-5-5
+      - key: AI_PROVIDER
+        value: google
+      - key: GEMINI_MODEL
+        value: gemini-2.5-flash
       - key: DEMO_CLOCK_OFFSET_DAYS
         value: "0"
       - key: DEMO_PAY_MODE
@@ -27,7 +29,7 @@ services:
         sync: false
       - key: PAYPAL_WEBHOOK_ID
         sync: false
-      - key: ANTHROPIC_API_KEY
+      - key: GOOGLE_GENERATIVE_AI_API_KEY
         sync: false
       - key: DATABASE_URL
         sync: false

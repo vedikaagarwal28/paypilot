@@ -65,7 +65,7 @@ Sandbox emails never leave PayPal. You can read them at [developer.paypal.com](h
 | | Feature |
 |---|---|
 | 🧠 | **Risk score (0–100)** worked out by code from days overdue, payment history, ignored reminders, amount vs usual and reminders already sent, with a factor breakdown |
-| ✍️ | **AI-drafted reminders** (Claude) in gentle, friendly-firm or firm tone, chosen by the risk score (under 40 / 40–69 / 70+). The AI writes the text and explains the tone; it never invents fees or threats |
+| ✍️ | **AI-drafted reminders** (Google Gemini) in gentle, friendly-firm or firm tone, chosen by the risk score (under 40 / 40–69 / 70+). The AI writes the text and explains the tone; it never invents fees or threats |
 | 🛡️ | **Autopilot rules + approval queue**: e.g. "auto-send gentle reminders up to $500 when risk is under 40; ask me for everything else" |
 | 📨 | **Real reminder delivery**: AI message written onto the PayPal invoice → PayPal's official reminder → email with a pay link (Resend) |
 | 💬 | **Copilot chat**: ask about late payers, draft reminders, create invoices with splits. Every send still goes through your rules |
@@ -83,7 +83,7 @@ Sandbox emails never leave PayPal. You can read them at [developer.paypal.com](h
 
 ### AI
 
-- **Claude** through the Vercel AI SDK (`ai@4` + `@ai-sdk/anthropic`)
+- **Google Gemini** (free tier) through the Vercel AI SDK (`ai@4` + `@ai-sdk/google`). The provider is switchable: set `AI_PROVIDER=anthropic` to use Claude instead
 - Structured drafting (`generateObject`) with a 20 s timeout and a safe template fallback, so the agent still works if the AI is down
 - A tool-using chat agent (`streamText`, up to 6 steps)
 - Design principle: **numbers come from code, words come from the model.** Risk scores, tones and the decision to send or queue are deterministic, so the agent is predictable and auditable.
@@ -95,7 +95,7 @@ Sandbox emails never leave PayPal. You can read them at [developer.paypal.com](h
 ```mermaid
 flowchart LR
   UI[Next.js UI<br/>Today · Invoices · Cash flow · Activity · Settings · Copilot] --> API[Next.js API routes]
-  API --> Agent[Agent<br/>risk scorer + Claude drafts + policy gate]
+  API --> Agent[Agent<br/>risk scorer + Gemini drafts + policy gate]
   Agent --> PP[(PayPal sandbox<br/>Invoicing · Payouts)]
   Agent --> DB[(Postgres<br/>history · queue · splits · activity)]
   PP -- webhooks --> API
@@ -106,7 +106,7 @@ flowchart LR
 2. **Run agent**:
    1. Syncs every invoice from PayPal (the source of truth for status).
    2. Scores each open invoice and picks a tone from the score.
-   3. Asks Claude for a reminder and a one-line explanation.
+   3. Asks the AI model (Gemini) for a reminder and a one-line explanation.
    4. Passes each reminder through the **policy gate** (your autopilot rules). It is either sent right away or added to the approval queue.
 3. **Sending a reminder**:
    1. Writes the AI message onto the PayPal invoice note.
@@ -135,12 +135,14 @@ Safety rails:
 |---|---|
 | App | Next.js 15 (App Router), React 19, TypeScript |
 | UI | Tailwind CSS v4, shadcn/ui, AG Grid Community 36, Recharts, lucide icons |
-| AI | Claude via Vercel AI SDK 4 (`ai`, `@ai-sdk/anthropic`), PayPal Agent Toolkit |
+| AI | Google Gemini (free tier) via Vercel AI SDK 4 (`ai`, `@ai-sdk/google`), PayPal Agent Toolkit. Claude supported as an option |
 | Payments | PayPal REST APIs (sandbox) |
 | Data | Postgres (Neon free tier) + Drizzle ORM |
 | Email | Resend |
 | Tests | Vitest (71 unit tests) |
 | Hosting | Render (Blueprint in `render.yaml`) |
+
+**Everything runs on free tiers:** PayPal sandbox, Google Gemini API, Neon Postgres, Resend, Render and GitHub all have free tiers that cover this project. Every library is open source (AG Grid Community is MIT).
 
 ---
 
@@ -150,7 +152,7 @@ Safety rails:
 
 - **Node.js 20 or newer** (22 recommended) and npm
 - **Git**
-- Free accounts on: [PayPal Developer](https://developer.paypal.com), [Anthropic](https://console.anthropic.com), [Neon](https://neon.tech) (or any Postgres), [Resend](https://resend.com)
+- Free accounts on: [PayPal Developer](https://developer.paypal.com), [Google AI Studio](https://aistudio.google.com), [Neon](https://neon.tech) (or any Postgres), [Resend](https://resend.com)
 
 ### 1. Get the code
 
@@ -179,9 +181,15 @@ cp .env.example .env        # Windows PowerShell: Copy-Item .env.example .env
    ```
 6. Webhooks need a public URL. See [step 7](#7-optional-receive-paypal-webhooks-locally) for local use or [Deploy to Render](#deploy-to-render). Leave `PAYPAL_WEBHOOK_ID` empty for now.
 
-### 3. Anthropic (Claude)
+### 3. AI model (Google Gemini, free)
 
-Create an API key at [console.anthropic.com](https://console.anthropic.com) and set `ANTHROPIC_API_KEY`. `ANTHROPIC_MODEL` defaults to `claude-sonnet-5-5`. If Claude is unreachable, PayPilot keeps working and uses safe template reminders, labelled "template" in the UI.
+1. Go to [Google AI Studio → API keys](https://aistudio.google.com/apikey), sign in with a Google account and click **Create API key**. No card is needed for the free tier.
+2. Set `GOOGLE_GENERATIVE_AI_API_KEY` in `.env`. Leave `AI_PROVIDER=google`.
+3. `GEMINI_MODEL` defaults to `gemini-2.5-flash`. If AI Studio lists a newer free Flash model, use that ID instead.
+
+The free tier is rate-limited. One agent run makes about 4 calls, well within it. If the AI is unreachable or rate-limited, PayPilot keeps working and uses safe template reminders, labelled "template" in the UI.
+
+**Optional, paid:** to use Claude instead, set `AI_PROVIDER=anthropic` and `ANTHROPIC_API_KEY` (from [console.anthropic.com](https://console.anthropic.com)).
 
 ### 4. Database (Neon)
 
@@ -242,7 +250,10 @@ All variables live in `.env` (local) or in the Render dashboard (deployed). `.en
 | `PAYPAL_WEBHOOK_ID` | for webhooks | | ID of the webhook registered in the PayPal app (used for signature verification) |
 | `PAYPAL_API_BASE` | | `https://api-m.sandbox.paypal.com` | PayPal API host. Keep it on sandbox |
 | `PAYPAL_WEBHOOK_SKIP_VERIFY` | | `false` | `true` only for local testing with PayPal's simulator |
-| `ANTHROPIC_API_KEY` | ✅ | | Claude API key |
+| `AI_PROVIDER` | | `google` | `google` (Gemini, free tier) or `anthropic` (Claude, paid) |
+| `GOOGLE_GENERATIVE_AI_API_KEY` | ✅ | | Gemini API key from Google AI Studio |
+| `GEMINI_MODEL` | | `gemini-2.5-flash` | Gemini model ID |
+| `ANTHROPIC_API_KEY` | only if `AI_PROVIDER=anthropic` | | Claude API key |
 | `ANTHROPIC_MODEL` | | `claude-sonnet-5-5` | Claude model ID |
 | `DATABASE_URL` | ✅ | | Postgres connection string |
 | `RESEND_API_KEY` | for email | | Resend API key. Without it, reminders still go out through PayPal and the app logs "email not delivered" |
@@ -296,7 +307,7 @@ src/
     risk/score.ts           Deterministic 0–100 risk score + tone bands
     policy/gate.ts          Autopilot rules: send now or queue for approval
     splits/compute.ts       Collaborator split maths (rounds down, never over 100%)
-    agent/                  Claude drafting, triage run, copilot tools and system prompt
+    agent/                  AI drafting (Gemini/Claude), triage run, copilot tools and system prompt
     actions/                Request / execute / skip / retry queued actions (atomic, idempotent)
     payments/on-paid.ts     Payment confirmed → split payouts (idempotent), payout retry
     sync/                   PayPal → DB sync and the 10 s polling backup
@@ -344,7 +355,7 @@ render.yaml                 Render Blueprint
 | Payout fails with `AUTHORIZATION_ERROR` | Tick **Payouts** in your PayPal app's Features, save, wait a minute |
 | Payout fails with `INSUFFICIENT_FUNDS` | The sandbox Business account needs balance. Have a buyer pay an invoice first, or add funds in the sandbox account settings. Then click **Retry** on **Cash flow** |
 | Reminders show "(PayPal only)" | Resend isn't set up, or `DEMO_INBOX_EMAIL` isn't your Resend sign-up email |
-| Drafts are labelled "template" | Claude was unreachable or `ANTHROPIC_API_KEY` / `ANTHROPIC_MODEL` is wrong. The app keeps working with templates |
+| Drafts are labelled "template" | The AI was unreachable, rate-limited, or `GOOGLE_GENERATIVE_AI_API_KEY` / `GEMINI_MODEL` is wrong. The app keeps working with templates |
 | Webhooks return 401 | `PAYPAL_WEBHOOK_ID` doesn't match the webhook PayPal is calling |
 | Paid invoice not showing as paid | Keep the Today or Cash flow page open; the polling backup checks PayPal every 10 s |
 | "Demo was reset less than 5 minutes ago" | The UI has a 5-minute cooldown; wait, or run `npm run demo:reset` |
