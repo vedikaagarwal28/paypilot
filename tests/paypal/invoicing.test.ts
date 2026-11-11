@@ -50,6 +50,23 @@ test('remindInvoice resolves on 204', async () => {
   expect(JSON.parse(calls[1].init.body!)).toEqual({ send_to_recipient: true });
 });
 
+test('paidAmountCents only reports fully paid invoices, using the paid amount', async () => {
+  const { paidAmountCents } = await import('@/lib/paypal/invoicing');
+  const base = { id: 'x', detail: {}, amount: { value: '1800.00', currency_code: 'USD' } };
+  expect(paidAmountCents({ ...base, status: 'PAID', payments: { paid_amount: { value: '1800.00', currency_code: 'USD' } } } as never)).toBe(180000);
+  expect(paidAmountCents({ ...base, status: 'MARKED_AS_PAID' } as never)).toBe(180000);
+  expect(paidAmountCents({ ...base, status: 'PAID', payments: { paid_amount: { value: '900.00', currency_code: 'USD' } } } as never)).toBe(90000);
+  expect(paidAmountCents({ ...base, status: 'PARTIALLY_PAID', payments: { paid_amount: { value: '900.00', currency_code: 'USD' } } } as never)).toBeNull();
+  expect(paidAmountCents({ ...base, status: 'SENT' } as never)).toBeNull();
+});
+
+test('paypalFetch passes an abort signal so hung calls time out', async () => {
+  const calls = stubFetch([TOKEN, { json: { id: 'INV2-AAA', status: 'SENT', detail: {} } }]);
+  const { getInvoice } = await import('@/lib/paypal/invoicing');
+  await getInvoice('INV2-AAA');
+  expect(calls[1].init.signal).toBeInstanceOf(AbortSignal);
+});
+
 test('payerViewUrl picks payer-view link', async () => {
   const { payerViewUrl } = await import('@/lib/paypal/invoicing');
   expect(payerViewUrl({ id: 'x', status: 'SENT', detail: {}, links: [{ rel: 'self', href: 'a' }, { rel: 'payer-view', href: 'https://pay' }] } as never)).toBe('https://pay');

@@ -7,6 +7,7 @@ import { env } from '@/lib/env';
 import { cancelInvoice, createDraftInvoice, deleteDraftInvoice, getInvoice, payerViewUrl, recordPayment, sendInvoice } from '@/lib/paypal/invoicing';
 import { getSettings, saveSettings } from '@/lib/settings/store';
 import { DEFAULT_RULES } from '@/lib/types';
+import { batchId } from './batch';
 import { SEED_CLIENTS, SEED_COLLABORATORS, SEED_INVOICES } from './seed-data';
 
 export class ResetCooldownError extends Error {
@@ -17,11 +18,6 @@ export class ResetCooldownError extends Error {
 }
 
 const COOLDOWN_MS = 5 * 60 * 1000;
-const pad = (n: number) => String(n).padStart(2, '0');
-
-function batchId(d: Date): string {
-  return `PP${String(d.getUTCFullYear()).slice(2)}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}`;
-}
 
 async function retireOldBatch(demoBatch: string) {
   const old = await getDb().select().from(invoices).where(eq(invoices.demoBatch, demoBatch));
@@ -50,6 +46,8 @@ export async function resetDemo(opts: { force?: boolean } = {}): Promise<{ batch
 
   const now = demoNow();
   const batch = batchId(new Date());
+  // Point settings at the new batch before creating invoices, so a half-finished reset still shows what was made.
+  await saveSettings({ rules: DEFAULT_RULES, demoBatch: batch });
   const clientRows = await db
     .insert(clients)
     .values(SEED_CLIENTS.map((c) => ({

@@ -1,5 +1,10 @@
 'use client';
 
+import { Loader2Icon, RotateCcwIcon } from 'lucide-react';
+import { useState } from 'react';
+import { toast } from 'sonner';
+import { Button } from '@/components/ui/button';
+import { send } from '@/lib/fetcher';
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import useSWR from 'swr';
 import { timeAgo } from '@/components/activity-list';
@@ -10,6 +15,33 @@ import { formatUsd } from '@/lib/money';
 import type { getCashflow } from '@/lib/queries/cashflow';
 
 type CashflowData = Awaited<ReturnType<typeof getCashflow>>;
+
+const RETRYABLE = ['FAILED', 'RETURNED', 'BLOCKED', 'DENIED'];
+
+function RetryPayout({ invoiceId, onDone }: { invoiceId: number; onDone: () => void }) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <Button
+      size="xs"
+      variant="outline"
+      disabled={busy}
+      onClick={async () => {
+        setBusy(true);
+        try {
+          const r = await send<{ retried: number }>('/api/payouts/retry', 'POST', { invoiceId });
+          toast.success(r.retried ? `Retrying ${r.retried} payout${r.retried === 1 ? '' : 's'}` : 'Nothing to retry');
+          onDone();
+        } catch (e) {
+          toast.error((e as Error).message);
+        } finally {
+          setBusy(false);
+        }
+      }}
+    >
+      {busy ? <Loader2Icon className="animate-spin" /> : <RotateCcwIcon />} Retry
+    </Button>
+  );
+}
 
 function Tile({ label, cents, hint, className }: { label: string; cents?: number; hint: string; className?: string }) {
   return (
@@ -22,7 +54,7 @@ function Tile({ label, cents, hint, className }: { label: string; cents?: number
 }
 
 export default function CashflowPage() {
-  const { data, error } = useSWR<CashflowData>('/api/cashflow', fetcher, { refreshInterval: 3000 });
+  const { data, error, mutate } = useSWR<CashflowData>('/api/cashflow', fetcher, { refreshInterval: 3000 });
   const chart = (data?.weekly ?? []).map((w) => ({
     week: new Date(`${w.weekStart}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }),
     Received: w.receivedCents / 100,
@@ -79,7 +111,12 @@ export default function CashflowPage() {
                       <td>{p.invoiceNumber}</td>
                       <td>{p.clientName}</td>
                       <td className="text-right tabular-nums">{formatUsd(p.amountCents)}</td>
-                      <td className="pl-4"><StatusBadge status={p.status} /></td>
+                      <td className="pl-4">
+                        <span className="inline-flex items-center gap-2">
+                          <StatusBadge status={p.status} />
+                          {RETRYABLE.includes(p.status) && <RetryPayout invoiceId={p.invoiceId} onDone={() => mutate()} />}
+                        </span>
+                      </td>
                       <td className="text-right text-xs text-muted-foreground">{timeAgo(p.createdAt)}</td>
                     </tr>
                   ))}

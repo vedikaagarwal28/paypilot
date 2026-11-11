@@ -20,6 +20,8 @@ export function describePayPalError(e: unknown): string {
   return String(e);
 }
 
+const TIMEOUT_MS = 15_000;
+
 let token: { value: string; expiresAt: number } | null = null;
 
 export async function getAccessToken(): Promise<string> {
@@ -32,6 +34,7 @@ export async function getAccessToken(): Promise<string> {
       'Content-Type': 'application/x-www-form-urlencoded',
     },
     body: 'grant_type=client_credentials',
+    signal: AbortSignal.timeout(TIMEOUT_MS),
   });
   const json = await res.json();
   if (!res.ok) {
@@ -44,6 +47,7 @@ export async function getAccessToken(): Promise<string> {
 /** `raw` sends a pre-serialised JSON body untouched (used for webhook verification). */
 export async function paypalFetch<T>(path: string, init: { method?: string; body?: unknown; raw?: string } = {}): Promise<T> {
   const res = await fetch(`${env().PAYPAL_API_BASE}${path}`, {
+    signal: AbortSignal.timeout(TIMEOUT_MS),
     method: init.method ?? 'GET',
     headers: {
       Authorization: `Bearer ${await getAccessToken()}`,

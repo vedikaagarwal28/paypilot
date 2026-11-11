@@ -1,5 +1,6 @@
 import { and, eq } from 'drizzle-orm';
 import { logActivity } from '@/lib/activity/log';
+import { demoNow } from '@/lib/clock';
 import { getDb } from '@/lib/db/client';
 import { clients, invoices, pendingActions } from '@/lib/db/schema';
 import { describePayPalError } from '@/lib/paypal/http';
@@ -18,7 +19,7 @@ export async function executeAction(id: number, by: 'rule' | 'user', edits?: { s
   const db = getDb();
   const [claimed] = await db
     .update(pendingActions)
-    .set({ status: 'executing', decidedBy: by, ...(edits?.subject ? { subject: edits.subject } : {}), ...(edits?.body ? { body: edits.body } : {}) })
+    .set({ status: 'executing', decidedBy: by, decidedAt: new Date(), ...(edits?.subject ? { subject: edits.subject } : {}), ...(edits?.body ? { body: edits.body } : {}) })
     .where(and(eq(pendingActions.id, id), eq(pendingActions.status, 'queued')))
     .returning();
   if (!claimed) {
@@ -35,7 +36,7 @@ export async function executeAction(id: number, by: 'rule' | 'user', edits?: { s
 
   try {
     const live = await getInvoice(row.invoice.paypalId);
-    const check = canExecute(claimed, live.status);
+    const check = canExecute(claimed, live.status, { lastReminderAt: row.invoice.lastReminderAt, now: demoNow() });
     if (!check.ok) {
       await finish(id, 'skipped', check.reason);
       await logActivity({ actor, action: 'action_skipped', summary: `Skipped ${claimed.type.replace('_', ' ')} for ${row.client.name}`, reason: check.reason, invoiceId: row.invoice.id });
@@ -54,8 +55,9 @@ export async function executeAction(id: number, by: 'rule' | 'user', edits?: { s
     } else {
       await sendInvoice(row.invoice.paypalId);
       await finish(id, 'sent');
-      await syncInvoices();
       await logActivity({ actor, action: 'invoice_sent', summary: `Sent invoice ${row.invoice.number} to ${row.client.name}`, reason: by === 'rule' ? claimed.gateReason : 'Approved by you', invoiceId: row.invoice.id });
+      // Best-effort cache refresh: the invoice is already sent, so a sync error must not mark this action failed.
+      await syncInvoices().catch(() => {});
     }
     return 'sent';
   } catch (e) {

@@ -7,6 +7,7 @@ import { getSettings } from '@/lib/settings/store';
 
 export type PayoutRow = {
   id: number;
+  invoiceId: number;
   collaboratorName: string;
   invoiceNumber: string;
   clientName: string;
@@ -30,6 +31,7 @@ export async function getCashflow(): Promise<Cashflow & { payouts: PayoutRow[] }
     ...aggregateCashflow(inv, rows.map((r) => r.payout), demoNow()),
     payouts: rows.map((r) => ({
       id: r.payout.id,
+      invoiceId: r.payout.invoiceId,
       collaboratorName: r.collaborator.name,
       invoiceNumber: r.invoice.number,
       clientName: r.client.name,

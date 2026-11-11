@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { logActivity } from '@/lib/activity/log';
 import { getDb } from '@/lib/db/client';
 import { clients, invoices, pendingActions } from '@/lib/db/schema';
@@ -40,7 +40,14 @@ export async function requestAction(i: {
       usedFallback: i.usedFallback ?? false,
       status: 'queued',
     })
+    .onConflictDoNothing()
     .returning();
+
+  if (!action) {
+    // Another run or click already has an open action for this invoice; don't stack a second one.
+    const [open] = await db.select().from(pendingActions).where(and(eq(pendingActions.invoiceId, i.invoiceId), inArray(pendingActions.status, ['queued', 'executing'])));
+    return { actionId: open?.id ?? 0, auto: false, gateReason: 'An action for this invoice is already in progress', status: (open?.status ?? 'queued') as ActionStatus };
+  }
 
   await logActivity({
     actor: 'agent',

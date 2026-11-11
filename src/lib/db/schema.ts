@@ -1,6 +1,7 @@
 import {
-  boolean, date, integer, jsonb, pgTable, real, serial, text, timestamp, unique,
+  boolean, date, integer, jsonb, pgTable, real, serial, text, timestamp, unique, uniqueIndex,
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import type { RiskFactor, Rules } from '@/lib/types';
 
 const ts = (name: string) => timestamp(name, { withTimezone: true });
@@ -69,7 +70,10 @@ export const pendingActions = pgTable('pending_actions', {
   error: text('error'),
   createdAt: ts('created_at').notNull().defaultNow(),
   decidedAt: ts('decided_at'),
-});
+}, (t) => [
+  // At most one open action per invoice, so overlapping agent runs can't double-queue or double-send.
+  uniqueIndex('pending_actions_one_open_per_invoice').on(t.invoiceId).where(sql`status in ('queued', 'executing')`),
+]);
 
 export const payouts = pgTable('payouts', {
   id: serial('id').primaryKey(),

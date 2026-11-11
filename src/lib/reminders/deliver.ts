@@ -19,7 +19,12 @@ export async function deliverReminder(invoiceId: number, msg: { subject: string;
     .where(eq(invoices.id, invoiceId));
   if (!row) throw new Error(`Invoice ${invoiceId} not found`);
 
-  await updateInvoiceNote(row.invoice.paypalId, msg.body);
+  try {
+    await updateInvoiceNote(row.invoice.paypalId, msg.body);
+  } catch (e) {
+    // Best-effort: the official PayPal reminder and the email still carry the message.
+    await logActivity({ actor: 'system', action: 'note_update_failed', summary: `Could not write the message onto ${row.invoice.number}`, reason: e instanceof Error ? e.message : String(e), invoiceId });
+  }
   await remindInvoice(row.invoice.paypalId);
   await db
     .update(invoices)

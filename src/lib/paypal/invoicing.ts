@@ -1,4 +1,4 @@
-import { centsToString } from '@/lib/money';
+import { centsToString, toCents } from '@/lib/money';
 import { paypalFetch } from './http';
 
 export interface PayPalInvoice {
@@ -95,6 +95,13 @@ export async function recordPayment(id: string, amountCents: number, date: strin
     method: 'POST',
     body: { method: 'BANK_TRANSFER', payment_date: date, amount: { currency_code: 'USD', value: centsToString(amountCents) } },
   });
+}
+
+/** Amount actually received on a fully paid invoice; null unless PayPal reports it as paid. */
+export function paidAmountCents(inv: PayPalInvoice): number | null {
+  if (inv.status !== 'PAID' && inv.status !== 'MARKED_AS_PAID') return null;
+  const paid = (inv.payments as { paid_amount?: { value: string } } | undefined)?.paid_amount?.value ?? inv.amount?.value;
+  return paid ? toCents(paid) : null;
 }
 
 export function payerViewUrl(inv: PayPalInvoice): string | null {

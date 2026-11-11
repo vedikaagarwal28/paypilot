@@ -14,6 +14,11 @@ export function computeSplits(totalCents: number, s: Split[]): { collaboratorId:
   return s.map((x) => ({ collaboratorId: x.collaboratorId, amountCents: Math.floor((totalCents * x.percent) / 100) }));
 }
 
+/** PayPal rejects a reused sender_batch_id, so each payout retry gets its own. */
+export function retryBatchId(senderBatchId: string, attempt: number): string {
+  return `${senderBatchId.replace(/-retry-\d+$/, '')}-retry-${attempt}`;
+}
+
 /** Payouts still owed for a paid invoice; collaborators already in `existing` are never paid twice. */
 export function planPayouts(
   inv: { paypalId: string; amountCents: number },
