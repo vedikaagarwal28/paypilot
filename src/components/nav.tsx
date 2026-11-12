@@ -17,7 +17,7 @@ const LINKS = [
   { href: '/settings', label: 'Settings' },
 ];
 
-export function Nav({ demoOffsetDays }: { demoOffsetDays: number }) {
+export function Nav({ demoOffsetDays, paypalSimulated }: { demoOffsetDays: number; paypalSimulated: boolean }) {
   const pathname = usePathname();
   const [chatOpen, setChatOpen] = useState(false);
 
@@ -41,7 +41,11 @@ export function Nav({ demoOffsetDays }: { demoOffsetDays: number }) {
         <div className="ml-auto flex items-center gap-2">
           <DemoBadge />
           {demoOffsetDays > 0 && <DemoBadge>Demo time +{demoOffsetDays}d</DemoBadge>}
-          <span className="hidden rounded-full bg-sky-50 px-2 py-0.5 text-[11px] font-medium text-sky-700 sm:inline dark:bg-sky-950 dark:text-sky-300">PayPal sandbox</span>
+          {paypalSimulated ? (
+            <span className="hidden rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-800 sm:inline dark:bg-amber-950 dark:text-amber-300" title="PAYPAL_API_BASE points at a simulated PayPal API, not PayPal">PayPal simulated</span>
+          ) : (
+            <span className="hidden rounded-full bg-sky-50 px-2 py-0.5 text-[11px] font-medium text-sky-700 sm:inline dark:bg-sky-950 dark:text-sky-300">PayPal sandbox</span>
+          )}
           <Button size="sm" onClick={() => setChatOpen(true)}>
             <SparklesIcon /> Copilot
           </Button>

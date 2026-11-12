@@ -185,7 +185,7 @@ cp .env.example .env        # Windows PowerShell: Copy-Item .env.example .env
 
 1. Go to [Google AI Studio → API keys](https://aistudio.google.com/apikey), sign in with a Google account and click **Create API key**. No card is needed for the free tier.
 2. Set `GOOGLE_GENERATIVE_AI_API_KEY` in `.env`. Leave `AI_PROVIDER=google`.
-3. `GEMINI_MODEL` defaults to `gemini-2.5-flash`. If AI Studio lists a newer free Flash model, use that ID instead.
+3. `GEMINI_MODEL` defaults to `gemini-3.5-flash`. Google retires older models for new keys (e.g. `gemini-2.5-flash`); if a request says a model is unavailable, use a Flash model AI Studio lists instead.
 
 The free tier is rate-limited. One agent run makes about 4 calls, well within it. If the AI is unreachable or rate-limited, PayPilot keeps working and uses safe template reminders, labelled "template" in the UI.
 
@@ -252,7 +252,7 @@ All variables live in `.env` (local) or in the Render dashboard (deployed). `.en
 | `PAYPAL_WEBHOOK_SKIP_VERIFY` | | `false` | `true` only for local testing with PayPal's simulator |
 | `AI_PROVIDER` | | `google` | `google` (Gemini, free tier) or `anthropic` (Claude, paid) |
 | `GOOGLE_GENERATIVE_AI_API_KEY` | ✅ | | Gemini API key from Google AI Studio |
-| `GEMINI_MODEL` | | `gemini-2.5-flash` | Gemini model ID |
+| `GEMINI_MODEL` | | `gemini-3.5-flash` | Gemini model ID |
 | `ANTHROPIC_API_KEY` | only if `AI_PROVIDER=anthropic` | | Claude API key |
 | `ANTHROPIC_MODEL` | | `claude-sonnet-5-5` | Claude model ID |
 | `DATABASE_URL` | ✅ | | Postgres connection string |

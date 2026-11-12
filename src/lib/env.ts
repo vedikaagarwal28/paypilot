@@ -10,7 +10,7 @@ const schema = z.object({
   PAYPAL_WEBHOOK_SKIP_VERIFY: z.enum(['true', 'false']).default('false'),
   AI_PROVIDER: z.enum(['google', 'anthropic']).default('google'),
   GOOGLE_GENERATIVE_AI_API_KEY: z.string().default(''),
-  GEMINI_MODEL: z.string().default('gemini-2.5-flash'),
+  GEMINI_MODEL: z.string().default('gemini-3.5-flash'),
   ANTHROPIC_API_KEY: z.string().default(''),
   ANTHROPIC_MODEL: z.string().default('claude-sonnet-5-5'),
   DATABASE_URL: z.string().min(1),

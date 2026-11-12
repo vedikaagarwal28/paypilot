@@ -8,12 +8,15 @@
 // in front and splices the videos into one timeline. Step start times are written to <out>.markers.json.
 //
 // --smoke records a short check of the cursor, a popup and the splice without touching the demo data.
+// --simulate-paypal runs scripts/mock-paypal.mjs and points the app at it instead of PayPal (no sandbox account
+// needed). The app labels itself "PayPal simulated" and the payment step uses Record payment.
 
 import 'dotenv/config';
 import { spawn, spawnSync } from 'node:child_process';
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 
 const args = process.argv.slice(2);
@@ -32,7 +35,6 @@ const GAP = 0.6; // matches the pause build.py leaves after each line
 
 const ACME_BUYER = 2; // Acme Corp pays with the third sandbox buyer (see src/lib/demo/seed-data.ts)
 const EDIT_LINE = "\n\nIf something is holding this up, just reply and I'll help sort it out.";
-const COPILOT_QUESTION = 'Which clients are most likely to pay late?';
 
 const t0 = Date.now();
 const log = (msg) => console.log(`[${((Date.now() - t0) / 1000).toFixed(1).padStart(6)}s] ${msg}`);
@@ -55,6 +57,33 @@ function stepSeconds() {
   return scriptLines().map((s) => s.split(/\s+/).length / 2.5 + GAP);
 }
 
+// ---------- simulated PayPal ----------
+
+const MOCK_PORT = 4010;
+
+async function startMockPayPal() {
+  const child = spawn(process.execPath, [fileURLToPath(new URL('./scripts/mock-paypal.mjs', import.meta.url)), String(MOCK_PORT)],
+    { stdio: ['ignore', 'pipe', 'inherit'] });
+  await new Promise((resolve, reject) => {
+    child.stdout.once('data', resolve);
+    child.once('exit', (code) => reject(new Error(`simulated PayPal API exited (${code})`)));
+  });
+  // Inherited by the dev server and the demo reset. Next and dotenv never override variables that are already set.
+  Object.assign(process.env, {
+    PAYPAL_API_BASE: `http://localhost:${MOCK_PORT}`,
+    PAYPAL_CLIENT_ID: 'simulated',
+    PAYPAL_CLIENT_SECRET: 'simulated',
+    PAYPAL_WEBHOOK_ID: '',
+    SANDBOX_BUYER_EMAILS: 'brightline@example.com,orbit@example.com,acme@example.com',
+    SANDBOX_COLLAB_EMAILS: 'maya@example.com,leo@example.com',
+    RESEND_API_KEY: '',
+    DEMO_INBOX_EMAIL: '',
+  });
+  delete process.env.SANDBOX_BUYER_PASSWORDS;
+  log(`simulated PayPal API on http://localhost:${MOCK_PORT}`);
+  return child;
+}
+
 // ---------- dev server ----------
 
 async function healthy() {
@@ -67,6 +96,7 @@ async function healthy() {
 
 async function startServer() {
   if (await healthy()) {
+    if (flag('--simulate-paypal')) throw new Error(`stop the dev server at ${BASE} first: it has to start with the simulated PayPal settings`);
     log(`dev server already running at ${BASE}`);
     return null;
   }
@@ -161,6 +191,7 @@ async function drawCursor(page, x, y, click = false, ms = 0) {
 
 function trackCursor(page) {
   pos.set(page, { x: W / 2, y: H / 2 });
+  page.on('pageerror', (e) => log(`page error: ${e.message}\n${(e.stack ?? '').split('\n').slice(1, 6).join('\n')}`));
   page.on('load', () => drawCursor(page, pos.get(page).x, pos.get(page).y));
 }
 
@@ -417,6 +448,8 @@ function demoSteps(context, page) {
       await click(page, page.getByRole('button', { name: 'Run agent' }), 400);
       await page.getByRole('button', { name: 'Run agent' }).waitFor({ timeout: 180_000 });
       log('agent run finished');
+      await sleep(1500);
+      if (await page.getByText('Template draft:').count()) throw new RetakeError('the AI was unavailable for a draft, so a template was used');
     },
     // 4. auto-sent gentle reminder
     async () => {
@@ -442,21 +475,8 @@ function demoSteps(context, page) {
       await page.getByText(/Reminder sent to Acme Corp|PayPal rejected it/).first().waitFor({ timeout: 60_000 });
       log('Acme reminder approved');
     },
-    // 7. ask the copilot
+    // 7. open Acme's invoice and its split
     async () => {
-      await click(page, page.getByRole('button', { name: 'Copilot' }), 900);
-      const input = page.getByPlaceholder('Ask PayPilot…');
-      await click(page, input, 700);
-      await page.keyboard.type(COPILOT_QUESTION, { delay: 30 });
-      await page.keyboard.press('Enter');
-      await page.locator('.mr-4.space-y-2').first().waitFor({ timeout: 60_000 });
-      await input.and(page.locator(':enabled')).waitFor({ timeout: 90_000 });
-      await sleep(1500);
-      log('copilot answered');
-    },
-    // 8. open Acme's invoice and its split
-    async () => {
-      await page.keyboard.press('Escape');
       await click(page, nav(page, 'Invoices'), 900);
       const row = page.locator('.ag-row').filter({ hasText: 'Acme Corp' }).first();
       await row.waitFor({ timeout: 30_000 });
@@ -466,14 +486,12 @@ function demoSteps(context, page) {
       await split.waitFor();
       await hover(page, split, 1000);
     },
-    // 9. pay as the client in the PayPal popup, or, without buyer passwords, the app's Record payment
+    // 8. pay as the client in the PayPal popup, or, without buyer passwords, the app's Record payment
     // fallback (marks the real sandbox invoice paid through the API; same payouts follow)
     async () => {
       if (!process.env.SANDBOX_BUYER_PASSWORDS) {
         log('no SANDBOX_BUYER_PASSWORDS: using Record payment instead of the PayPal checkout');
-        await hover(page, page.getByRole('link', { name: /Pay as client in PayPal/ }), 900);
-        await sleep(800);
-        await click(page, page.getByRole('button', { name: 'Record payment' }), 700);
+        await click(page, page.getByRole('button', { name: 'Record payment' }), 1000);
         await page.getByText('Payment recorded in PayPal').first().waitFor({ timeout: 60_000 });
         log('payment recorded');
         return;
@@ -486,7 +504,7 @@ function demoSteps(context, page) {
       await page.bringToFront();
       log('payment done');
     },
-    // 10. payouts land
+    // 9. payouts land
     async () => {
       await page.keyboard.press('Escape');
       await click(page, nav(page, 'Cash flow'), 900);
@@ -498,14 +516,14 @@ function demoSteps(context, page) {
       await sleep(1200);
       await hover(page, payouts.getByText('Leo Park'), 700);
     },
-    // 11. activity log
+    // 10. activity log
     async () => {
       await click(page, nav(page, 'Activity'), 900);
       await page.getByRole('heading', { name: 'Activity' }).waitFor();
       await glide(page, W / 2, H / 2, 500);
       await scrollBy(page, 900, 1800);
     },
-    // 12. how it works: invoicing
+    // 11. how it works: invoicing
     async () => {
       await page.setContent(DIAGRAM);
       await drawCursor(page, pos.get(page).x, pos.get(page).y);
@@ -513,14 +531,14 @@ function demoSteps(context, page) {
       await highlight(page, ['invoicing']);
       await hover(page, page.locator('#invoicing'), 900);
     },
-    // 13. webhook → payouts
+    // 12. webhook → payouts
     async () => {
       await highlight(page, ['pays', 'webhook', 'payouts']);
       await hover(page, page.locator('#webhook'), 900);
       await sleep(3500);
       await hover(page, page.locator('#payouts'), 900);
     },
-    // 14. risk score, Gemini, Agent Toolkit
+    // 13. risk score, Gemini, Agent Toolkit
     async () => {
       await highlight(page, ['copilot']);
       await hover(page, page.locator('#copilot'), 900);
@@ -528,13 +546,13 @@ function demoSteps(context, page) {
       await highlight(page, ['risk', 'words']);
       await hover(page, page.locator('#risk'), 900);
     },
-    // 15. back to Today
+    // 14. back to Today
     async () => {
       await openApp(page, '/');
       await page.getByText('Sent automatically', { exact: true }).waitFor();
       await hover(page, page.getByText('Waiting for you', { exact: true }), 1000);
     },
-    // 16. end card (title is overlaid in the edit)
+    // 15. end card (title is overlaid in the edit)
     async () => {
       await glide(page, W - 200, H - 150, 1200);
     },
@@ -577,25 +595,19 @@ function smokeSteps(context, page) {
 
 // ---------- main ----------
 
-async function main() {
-  const smoke = flag('--smoke');
-  const durations = smoke ? [2, 4, 3, 3] : stepSeconds();
-  const server = await startServer();
-  let browser;
-  try {
-    if (!smoke) {
-      await checkData();
-      if (!flag('--no-reset')) resetDemo();
-      await warmUp();
-    }
+/** A take that would look wrong on video (e.g. template drafts while Gemini's free tier is overloaded). */
+class RetakeError extends Error {}
 
-    rmSync(WORK, { recursive: true, force: true });
-    mkdirSync(WORK, { recursive: true });
-    browser = await chromium.launch({ headless: !flag('--headed') });
-    const context = await browser.newContext({
-      viewport: { width: W, height: H },
-      recordVideo: { dir: WORK, size: { width: W, height: H } },
-    });
+const MAX_TAKES = 4;
+
+async function recordTake(browser, smoke, durations) {
+  rmSync(WORK, { recursive: true, force: true });
+  mkdirSync(WORK, { recursive: true });
+  const context = await browser.newContext({
+    viewport: { width: W, height: H },
+    recordVideo: { dir: WORK, size: { width: W, height: H } },
+  });
+  try {
     const timeline = new Timeline();
     context.on('page', (p) => timeline.add(p));
     const page = await context.newPage();
@@ -613,7 +625,12 @@ async function main() {
       const begin = Date.now();
       starts.push((begin - startAt) / 1000);
       log(`step ${i + 1}/${steps.length} (${durations[i].toFixed(1)}s)`);
-      await step();
+      try {
+        await step();
+      } catch (e) {
+        if (e instanceof RetakeError) throw e;
+        throw new Error(`step ${i + 1} failed: ${e.message}\nscreenshot: ${await shot(timeline.front ?? page, `failed-step-${i + 1}`)}`);
+      }
       await sleep(durations[i] * 1000 - (Date.now() - begin));
     }
     const end = (Date.now() - startAt) / 1000;
@@ -625,8 +642,39 @@ async function main() {
     writeFileSync(OUT.replace(/\.webm$/, '') + '.markers.json', JSON.stringify({ starts, end }, null, 2));
     log(`saved ${OUT} (${end.toFixed(1)} s) and its markers`);
   } finally {
+    await context.close().catch(() => {});
+  }
+}
+
+async function main() {
+  const smoke = flag('--smoke');
+  const durations = smoke ? [2, 4, 3, 3] : stepSeconds();
+  const mock = flag('--simulate-paypal') ? await startMockPayPal() : null;
+  let server;
+  let browser;
+  try {
+    server = await startServer();
+    if (!smoke) {
+      await checkData();
+      if (!flag('--no-reset')) resetDemo();
+      await warmUp();
+    }
+
+    browser = await chromium.launch({ headless: !flag('--headed') });
+    for (let take = 1; ; take++) {
+      try {
+        await recordTake(browser, smoke, durations);
+        break;
+      } catch (e) {
+        if (!(e instanceof RetakeError) || take >= MAX_TAKES || flag('--no-reset')) throw e;
+        log(`take ${take} discarded: ${e.message}. Resetting for take ${take + 1}`);
+        resetDemo();
+      }
+    }
+  } finally {
     await browser?.close();
     stopServer(server);
+    stopServer(mock);
   }
 }
 

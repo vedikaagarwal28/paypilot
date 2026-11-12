@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from 'next/font/google';
 import { Nav } from '@/components/nav';
 import { Toaster } from '@/components/ui/sonner';
 import { demoOffsetDays } from '@/lib/clock';
+import { isPayPalSimulated } from '@/lib/paypal/http';
 import './globals.css';
 
 const geistSans = Geist({ variable: '--font-geist-sans', subsets: ['latin'] });
@@ -19,7 +20,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="en">
       <body className={`${geistSans.variable} ${geistMono.variable} min-h-screen bg-muted/30 font-sans antialiased`}>
-        <Nav demoOffsetDays={demoOffsetDays()} />
+        <Nav demoOffsetDays={demoOffsetDays()} paypalSimulated={isPayPalSimulated()} />
         <main className="mx-auto max-w-6xl px-4 py-6">{children}</main>
         <Toaster richColors position="bottom-right" />
       </body>

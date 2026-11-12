@@ -20,6 +20,15 @@ export function describePayPalError(e: unknown): string {
   return String(e);
 }
 
+/** True when PAYPAL_API_BASE points somewhere other than PayPal, e.g. scripts/mock-paypal.mjs. */
+export function isPayPalSimulated(): boolean {
+  try {
+    return !new URL(process.env.PAYPAL_API_BASE || 'https://api-m.sandbox.paypal.com').hostname.endsWith('.paypal.com');
+  } catch {
+    return false;
+  }
+}
+
 const TIMEOUT_MS = 15_000;
 
 let token: { value: string; expiresAt: number } | null = null;
