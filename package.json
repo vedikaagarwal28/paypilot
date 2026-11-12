@@ -10,7 +10,8 @@
     "test": "vitest run",
     "db:push": "drizzle-kit push",
     "demo:reset": "tsx scripts/reset-demo.ts",
-    "smoke": "tsx scripts/smoke.ts"
+    "smoke": "tsx scripts/smoke.ts",
+    "record": "node record_demo.mjs"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^1.2.12",
@@ -47,6 +48,7 @@
     "drizzle-kit": "^0.31.11",
     "eslint": "^9",
     "eslint-config-next": "15.5.29",
+    "playwright": "^1.65.0",
     "tailwindcss": "^4",
     "tsx": "^4.23.15",
     "typescript": "^5",
