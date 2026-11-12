@@ -466,8 +466,18 @@ function demoSteps(context, page) {
       await split.waitFor();
       await hover(page, split, 1000);
     },
-    // 9. pay as the client in the PayPal popup
+    // 9. pay as the client in the PayPal popup, or, without buyer passwords, the app's Record payment
+    // fallback (marks the real sandbox invoice paid through the API; same payouts follow)
     async () => {
+      if (!process.env.SANDBOX_BUYER_PASSWORDS) {
+        log('no SANDBOX_BUYER_PASSWORDS: using Record payment instead of the PayPal checkout');
+        await hover(page, page.getByRole('link', { name: /Pay as client in PayPal/ }), 900);
+        await sleep(800);
+        await click(page, page.getByRole('button', { name: 'Record payment' }), 700);
+        await page.getByText('Payment recorded in PayPal').first().waitFor({ timeout: 60_000 });
+        log('payment recorded');
+        return;
+      }
       const popup = context.waitForEvent('page');
       await click(page, page.getByRole('link', { name: /Pay as client in PayPal/ }), 900);
       const pp = await popup;
